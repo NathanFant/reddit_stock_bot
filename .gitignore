@@ -10,3 +10,5 @@ __pycache__/
 # Log and output
 *.json
 *.jsonl
+
+start_bot.sh
