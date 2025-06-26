@@ -1,5 +1,12 @@
-.venv
+# Virtual env
+.venv/
+
+# Secrets
 .env
-__pycache__
-*.jsonl
+
+# Bytecode
+__pycache__/
+
+# Log and output
 *.json
+*.jsonl
