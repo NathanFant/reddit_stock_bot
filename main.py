@@ -1,7 +1,7 @@
 import praw
 import re
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from sort_json import sort_json
 from dotenv import load_dotenv
 import os
@@ -18,22 +18,29 @@ if not all([REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT]):
 
 
 SCORE_THRESHOLD = 20  # minimum confidence score to save
-SUBREDDITS = ["stocks", "wallstreetbets", "smallstreetbets", "investing"]
+SUBREDDITS = [
+    "stocks",
+    "wallstreetbets",
+    "smallstreetbets",
+    "investing",
+    "stockmarket",
+    "options",
+    "daytrading",
+    "algotrading",
+]
 FLAIRS_TO_IGNORE = [
     flair.strip().lower()
     for flair in [
-        "macro",
         "off-topic",
         "discussion",
         "question",
         "news",
-        "politics",
         "broad market news",
         "shitpost",
         "meme",
     ]
 ]
-POST_LIMIT = 500  # per subreddit
+POST_LIMIT = 1000  # per subreddit
 
 
 # ---- SETUP ----
@@ -53,6 +60,9 @@ def score_post(post, age_hours):
     if len(post.selftext.split()) > 400:
         score += 10
         breakdown["long_body"] = 10
+    else:
+        score -= 10
+        breakdown["short_body"] = -10
     if any(tag in text for tag in ["earnings", "guidance", "catalyst"]):
         score += 10
         breakdown["financial_terms"] = 10
@@ -123,24 +133,57 @@ def log_post(post, score, breakdown):
 
 def main():
     open("dd_log.jsonl", "w").close()  # clear log file at start
+    seen_ids = set()
+    sorts = ["new", "hot", "top"]
+
     for sub in SUBREDDITS:
-        print(f"Checking /r/{sub}...")
-        for post in reddit.subreddit(sub).new(limit=POST_LIMIT):
-            if post.stickied:
-                continue
-            elif (
-                post.link_flair_text
-                and post.link_flair_text.strip().lower() in FLAIRS_TO_IGNORE
-            ):
-                continue
-            created_at = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
-            age_hours = (
-                datetime.now(tz=timezone.utc) - created_at
-            ).total_seconds() / 3600
-            score, breakdown = score_post(post, age_hours)
-            if score >= SCORE_THRESHOLD:
-                print(f"[{score}] {post.title}")
-                log_post(post, score, breakdown)
+        print(f"\n--- /r/{sub} ---")
+        total_processed = 0
+
+        for sort in sorts:
+            print(f"Checking /r/{sub} ({sort})...")
+            try:
+                if sort == "new":
+                    posts = reddit.subreddit(sub).new(limit=POST_LIMIT)
+                elif sort == "hot":
+                    posts = reddit.subreddit(sub).hot(limit=POST_LIMIT)
+                elif sort == "top":
+                    posts = reddit.subreddit(sub).top(
+                        time_filter="week", limit=POST_LIMIT
+                    )
+                else:
+                    raise ValueError(f"Unknown sort type: {sort}")
+
+                for post in posts:
+                    if post.id in seen_ids or post.stickied:
+                        continue
+                    seen_ids.add(post.id)
+                    total_processed += 1
+
+                    if post.stickied:
+                        continue
+                    elif (
+                        post.link_flair_text
+                        and post.link_flair_text.strip().lower() in FLAIRS_TO_IGNORE
+                    ):
+                        continue
+
+                    created_at = datetime.fromtimestamp(
+                        post.created_utc, tz=timezone.utc
+                    )
+                    age_hours = (
+                        datetime.now(tz=timezone.utc) - created_at
+                    ).total_seconds() / 3600
+                    score, breakdown = score_post(post, age_hours)
+
+                    if score >= SCORE_THRESHOLD:
+                        print(f"[{score}] {post.title}")
+                        log_post(post, score, breakdown)
+
+            except Exception as e:
+                print(f"Error processing /r/{sub} ({sort}): {e}")
+
+        print(f"\nProcessed {total_processed} posts in /r/{sub}")
     sort_json()
 
 
