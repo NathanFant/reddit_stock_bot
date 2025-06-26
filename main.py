@@ -20,8 +20,8 @@ if not all([REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT]):
 SCORE_THRESHOLD = 20  # minimum confidence score to save
 SUBREDDITS = ["stocks", "wallstreetbets", "smallstreetbets", "investing"]
 FLAIRS_TO_IGNORE = [
-    f.strip().lower()
-    for f in [
+    flair.strip().lower()
+    for flair in [
         "macro",
         "off-topic",
         "discussion",
@@ -29,6 +29,8 @@ FLAIRS_TO_IGNORE = [
         "news",
         "politics",
         "broad market news",
+        "shitpost",
+        "meme",
     ]
 ]
 POST_LIMIT = 500  # per subreddit
@@ -45,32 +47,49 @@ reddit = praw.Reddit(
 def score_post(post, age_hours):
     score = 0
     text = (post.title + " " + post.selftext).lower()
+    breakdown = {}
+    tickers = extract_tickers(post.title, post.selftext)
 
     if len(post.selftext.split()) > 400:
         score += 10
+        breakdown["long_body"] = 10
     if any(tag in text for tag in ["earnings", "guidance", "catalyst"]):
         score += 10
+        breakdown["financial_terms"] = 10
     if "sec.gov" in text or "10-q" in text or "10-k" in text:
         score += 15
+        breakdown["sec_filings"] = 15
     if any(term in text for term in ["insider buy", "short float", "call volume"]):
         score += 10
+        breakdown["technical_terms"] = 10
     if re.search(r"\$[A-Z]{1,5}", post.title):
         score += 5
+        breakdown["ticker_in_title"] = 5
     if "yolo" in text or "🚀" in text:
         score -= 15
+        breakdown["meme_penalty"] = -15
     if post.upvote_ratio and post.upvote_ratio >= 0.8:
         score += 5
+        breakdown["high_upvote_ratio"] = 5
     if age_hours < 1:
-        score += 5
+        score += 4
+        breakdown["new_post"] = 4
+    if len(tickers) < 1:
+        score -= 30
+        breakdown["no_tickers"] = -30
     elif age_hours < 3:
         score += 3
+        breakdown["recent_post"] = 3
     elif age_hours < 6:
         score += 2
+        breakdown["somewhat_recent_post"] = 2
     elif age_hours < 12:
         score += 1
-
-    score -= int(age_hours // 24)
-    return score
+        breakdown["older_post"] = 1
+    else:
+        score -= int(age_hours // 24)
+        breakdown["age_penalty"] = -int(age_hours // 24)
+    return score, breakdown
 
 
 def extract_tickers(title, body):
@@ -79,23 +98,24 @@ def extract_tickers(title, body):
     return list({t[1:] for t in body_tickers + title_tickers})  # remove duplicates
 
 
-def log_post(post, score):
+def log_post(post, score, breakdown):
     data = {
         "score": score,
-        "post_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+        "posted_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
         .date()
         .isoformat(),
+        "tickers": extract_tickers(
+            title=post.title.upper(), body=post.selftext.upper()
+        ),
         "title": post.title,
         "author": str(post.author),
         "subreddit": post.subreddit.display_name,
         "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
-        "url": post.url,
-        "tickers": extract_tickers(
-            title=post.title.upper(), body=post.selftext.upper()
-        ),
         "upvotes": post.score,
         "upvote_ratio": post.upvote_ratio,
+        "url": post.url,
         "body": post.selftext[:400],  # truncate long posts
+        "breakdown": breakdown,
     }
     with open("dd_log.jsonl", "a") as f:
         f.write(json.dumps(data) + "\n")
@@ -117,10 +137,10 @@ def main():
             age_hours = (
                 datetime.now(tz=timezone.utc) - created_at
             ).total_seconds() / 3600
-            score = score_post(post, age_hours)
+            score, breakdown = score_post(post, age_hours)
             if score >= SCORE_THRESHOLD:
                 print(f"[{score}] {post.title}")
-                log_post(post, score)
+                log_post(post, score, breakdown)
     sort_json()
 
 
