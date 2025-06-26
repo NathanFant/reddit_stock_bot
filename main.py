@@ -79,15 +79,15 @@ def extract_tickers(text):
 
 def log_post(post, score):
     data = {
-        "title": post.title,
-        "author": str(post.author),
         "score": score,
-        "subreddit": post.subreddit.display_name,
-        "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
-        "url": post.url,
         "created_utc": datetime.fromtimestamp(
             post.created_utc, tz=timezone.utc
         ).isoformat(),
+        "title": post.title,
+        "author": str(post.author),
+        "subreddit": post.subreddit.display_name,
+        "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
+        "url": post.url,
         "tickers": extract_tickers(post.title + " " + post.selftext),
         "upvotes": post.score,
         "upvote_ratio": post.upvote_ratio,
