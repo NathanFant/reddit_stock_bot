@@ -1,7 +1,7 @@
 import praw
 import re
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from sort_json import sort_json
 from dotenv import load_dotenv
 import os
@@ -73,22 +73,26 @@ def score_post(post, age_hours):
     return score
 
 
-def extract_tickers(text):
-    return re.findall(r"\$[A-Z]{1,5}", text.upper())
+def extract_tickers(title, body):
+    title_tickers = re.findall(r"\$[A-Z]{1,5}", title)
+    body_tickers = re.findall(r"\$[A-Z]{1,5}", body)
+    return list({t[1:] for t in body_tickers + title_tickers})  # remove duplicates
 
 
 def log_post(post, score):
     data = {
         "score": score,
-        "created_utc": datetime.fromtimestamp(
-            post.created_utc, tz=timezone.utc
-        ).isoformat(),
+        "post_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+        .date()
+        .isoformat(),
         "title": post.title,
         "author": str(post.author),
         "subreddit": post.subreddit.display_name,
         "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
         "url": post.url,
-        "tickers": extract_tickers(post.title + " " + post.selftext),
+        "tickers": extract_tickers(
+            title=post.title.upper(), body=post.selftext.upper()
+        ),
         "upvotes": post.score,
         "upvote_ratio": post.upvote_ratio,
         "body": post.selftext[:400],  # truncate long posts

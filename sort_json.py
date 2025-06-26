@@ -11,7 +11,7 @@ def load_posts(filepath):
 def save_posts(posts, filepath):
     with open(filepath, "w") as f:
         for post in posts:
-            f.write(json.dumps(post) + "\n")
+            f.write(json.dumps(post) + "\n\n")
 
 
 def sort_json():
