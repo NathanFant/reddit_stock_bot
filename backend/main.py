@@ -37,7 +37,7 @@ async def main():
                         else:
                             raise ValueError(f"Unknown sort type: {sort}")
 
-                        await process_posts(posts, session, seen_ids, subreddit)
+                        await process_posts(posts, session, seen_ids, subreddit, reddit)
 
                     except Exception as e:
                         print(f"Error processing /r/{sub} ({sort}): {e}")

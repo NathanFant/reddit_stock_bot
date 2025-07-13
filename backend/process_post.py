@@ -2,17 +2,9 @@ from post_logger import log_post, analyze_comments_with_llm, extract_tickers
 from datetime import datetime, timezone
 from constants import SCORE_THRESHOLD, FLAIRS_TO_IGNORE
 import re
-import asyncpraw
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
-reddit = asyncpraw.Reddit(
-    client_id=os.getenv("REDDIT_CLIENT_ID"),
-    client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-    user_agent=os.getenv("REDDIT_USER_AGENT"),
-)
 
 
 async def score_post(post, age_hours):
@@ -66,14 +58,14 @@ async def score_post(post, age_hours):
     return score, breakdown
 
 
-async def fetch_comments(post_id):
+async def fetch_comments(post_id, reddit):
     submission = await reddit.submission(id=post_id)
     await submission.load()  # ensure post is fully loaded
     await submission.comments.replace_more(limit=0)  # fetch all comments
     return [comment.body for comment in submission.comments.list()]
 
 
-async def process_posts(posts, session, seen_ids, subreddit_name):
+async def process_posts(posts, session, seen_ids, subreddit, reddit):
     async for post in posts:
         if post.id in seen_ids or post.stickied:
             continue
@@ -87,12 +79,12 @@ async def process_posts(posts, session, seen_ids, subreddit_name):
 
         created_at = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
         age_hours = (datetime.now(tz=timezone.utc) - created_at).total_seconds() / 3600
-        score, breakdown = score_post(post, age_hours)
+        score, breakdown = await score_post(post, age_hours)
 
         if score >= SCORE_THRESHOLD:
             print(f"[{score}] {post.title}")
 
-            comments = await fetch_comments(post.id)
+            comments = await fetch_comments(post.id, reddit)
             post_dict = {
                 "title": post.title,
                 "body": post.selftext,

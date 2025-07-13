@@ -99,7 +99,7 @@ async def log_post(post, score, breakdown):
         "posted_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
         .date()
         .isoformat(),
-        "tickers": extract_tickers(
+        "tickers": await extract_tickers(
             title=post.title.upper(), body=post.selftext.upper()
         ),
         "title": post.title,
@@ -107,7 +107,7 @@ async def log_post(post, score, breakdown):
         "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
         "upvote_ratio": post.upvote_ratio,
         "url": post.url,
-        "body": getattr(post, "body", "selftext"),
+        "body": getattr(post, "body", post.selftext[:400]),  # limit body length
         "breakdown": breakdown,
     }
     with open("dd_log.jsonl", "a") as f:
