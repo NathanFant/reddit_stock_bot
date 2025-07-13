@@ -1,8 +1,10 @@
 import sort_json
 import asyncio
 import aiohttp
+import asyncpraw
+import os
 from constants import SUBREDDITS, POST_LIMIT
-from process_post import process_posts, reddit
+from process_post import process_posts
 
 
 async def main():
@@ -10,30 +12,37 @@ async def main():
     seen_ids = set()
     sorts = ["new", "hot", "top"]
 
-    async with aiohttp.ClientSession() as session:
-        for subreddit in SUBREDDITS:
-            sub = await reddit.subreddit(subreddit)
-            print(f"\n--- /r/{sub} ---")
-            total_processed = 0
+    reddit = asyncpraw.Reddit(
+        client_id=os.getenv("REDDIT_CLIENT_ID"),
+        client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+        user_agent=os.getenv("REDDIT_USER_AGENT"),
+    )
 
-            for sort in sorts:
-                print(f"Checking /r/{sub} ({sort})...")
-                try:
-                    if sort == "new":
-                        posts = sub.new(limit=POST_LIMIT)
-                    elif sort == "hot":
-                        posts = sub.hot(limit=POST_LIMIT)
-                    elif sort == "top":
-                        posts = sub.top(time_filter="month", limit=POST_LIMIT)
-                    else:
-                        raise ValueError(f"Unknown sort type: {sort}")
+    async with reddit:
+        async with aiohttp.ClientSession() as session:
+            for subreddit in SUBREDDITS:
+                sub = await reddit.subreddit(subreddit)
+                print(f"\n--- /r/{sub} ---")
+                total_processed = 0
 
-                    await process_posts(posts, session, seen_ids, subreddit)
+                for sort in sorts:
+                    print(f"Checking /r/{sub} ({sort})...")
+                    try:
+                        if sort == "new":
+                            posts = sub.new(limit=POST_LIMIT)
+                        elif sort == "hot":
+                            posts = sub.hot(limit=POST_LIMIT)
+                        elif sort == "top":
+                            posts = sub.top(time_filter="month", limit=POST_LIMIT)
+                        else:
+                            raise ValueError(f"Unknown sort type: {sort}")
 
-                except Exception as e:
-                    print(f"Error processing /r/{sub} ({sort}): {e}")
+                        await process_posts(posts, session, seen_ids, subreddit)
 
-            print(f"\nProcessed {total_processed} posts in /r/{sub}")
+                    except Exception as e:
+                        print(f"Error processing /r/{sub} ({sort}): {e}")
+
+                print(f"\nProcessed {total_processed} posts in /r/{sub}")
     sort_json.sort_json()
     print("\nAll done! Check dd_log.jsonl for results.")
 

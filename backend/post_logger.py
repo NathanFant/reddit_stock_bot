@@ -10,7 +10,7 @@ load_dotenv()
 # ------------------------
 # Ticker extraction helper
 # ------------------------
-def extract_tickers(title, body):
+async def extract_tickers(title, body):
     """
     Extract stock tickers from the title and body of a post.
     Tickers are assumed to be uppercase letters, 1-5 characters long.
@@ -92,10 +92,10 @@ Respond only in JSON format like this:
 # ------------------------
 # Log updated post to file
 # ------------------------
-def log_post(post, score, breakdown):
+async def log_post(post, score, breakdown):
     data = {
         "score": score,
-        "sentiment_score": post.get("sentiment_score", 50),
+        "sentiment_score": getattr(post, "sentiment_score", 50),
         "posted_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
         .date()
         .isoformat(),
@@ -107,7 +107,7 @@ def log_post(post, score, breakdown):
         "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
         "upvote_ratio": post.upvote_ratio,
         "url": post.url,
-        "body": post["body"],
+        "body": getattr(post, "body", "selftext"),
         "breakdown": breakdown,
     }
     with open("dd_log.jsonl", "a") as f:

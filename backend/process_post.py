@@ -1,9 +1,9 @@
 from post_logger import log_post, analyze_comments_with_llm, extract_tickers
 from datetime import datetime, timezone
 from constants import SCORE_THRESHOLD, FLAIRS_TO_IGNORE
+import re
 import asyncpraw
 import os
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,11 +15,11 @@ reddit = asyncpraw.Reddit(
 )
 
 
-def score_post(post, age_hours):
+async def score_post(post, age_hours):
     score = 0
     text = (post.title + " " + post.selftext).lower()
     breakdown = {}
-    tickers = extract_tickers(post.title, post.selftext)
+    tickers = await extract_tickers(post.title, post.selftext)
 
     if len(post.selftext.split()) > 400:
         score += 10
@@ -107,4 +107,4 @@ async def process_posts(posts, session, seen_ids, subreddit_name):
                 print(f"LLM analysis failed for {post.id}: {e}")
                 post.sentiment_score = None
 
-            log_post(post, score, breakdown)
+            await log_post(post, score, breakdown)
