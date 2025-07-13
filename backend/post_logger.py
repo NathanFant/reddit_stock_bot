@@ -1,0 +1,114 @@
+import os
+import json
+import re
+from datetime import datetime, timezone
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+# ------------------------
+# Ticker extraction helper
+# ------------------------
+def extract_tickers(title, body):
+    """
+    Extract stock tickers from the title and body of a post.
+    Tickers are assumed to be uppercase letters, 1-5 characters long.
+    """
+    title_tickers = re.findall(r"\$[A-Z]{1,5}", title)
+    body_tickers = re.findall(r"\$[A-Z]{1,5}", body)
+    return list({t[1:] for t in body_tickers + title_tickers})  # removes duplicates
+
+
+# async def log_post(post, score, breakdown):
+#     data = {
+#         "score": score,
+#         "posted_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+#         .date()
+#         .isoformat(),
+#         "tickers": extract_tickers(
+#             title=post.title.upper(), body=post.selftext.upper()
+#         ),
+#         "title": post.title,
+#         "author": str(post.author),
+#         "subreddit": post.subreddit.display_name,
+#         "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
+#         "upvotes": post.score,
+#         "upvote_ratio": post.upvote_ratio,
+#         "url": post.url,
+#         "body": post.selftext,
+#         "breakdown": breakdown,
+#     }
+#     with open("dd_log.jsonl", "a") as f:
+#         f.write(json.dumps(data) + "\n")
+
+
+# ------------------------
+# Main LLM sentiment analyzer
+# ------------------------
+async def analyze_comments_with_llm(session, post):
+    prompt = f"""
+Analyze the following Reddit post and its comments for sentiment and relevance.
+
+Title: {post["title"]}
+Body: {post["body"]}
+Comments: {" ".join(post["comments"])}
+
+Respond only in JSON format like this:
+{{
+  "summary": "short rewritten body",
+  "sentiment_score": 0-100
+}}
+"""
+
+    async with session.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+        },
+    ) as response:
+        if response.status != 200:
+            raise Exception(f"LLM API error: {response.status} {await response.text()}")
+        data = await response.json()
+        content = data["choices"][0]["message"]["content"]
+
+    try:
+        parsed = json.loads(content)
+        post["body"] = parsed.get("summary", post["body"])
+        post["sentiment_score"] = parsed.get("sentiment_score", 50)
+    except Exception as e:
+        print("Failed to parse LLM response:", content)
+        post["sentiment_score"] = 50  # fallback neutral
+
+    return post
+
+
+# ------------------------
+# Log updated post to file
+# ------------------------
+def log_post(post, score, breakdown):
+    data = {
+        "score": score,
+        "sentiment_score": post.get("sentiment_score", 50),
+        "posted_date": datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+        .date()
+        .isoformat(),
+        "tickers": extract_tickers(
+            title=post.title.upper(), body=post.selftext.upper()
+        ),
+        "title": post.title,
+        "subreddit": post.subreddit.display_name,
+        "flair": post.link_flair_text.strip().lower() if post.link_flair_text else None,
+        "upvote_ratio": post.upvote_ratio,
+        "url": post.url,
+        "body": post["body"],
+        "breakdown": breakdown,
+    }
+    with open("dd_log.jsonl", "a") as f:
+        f.write(json.dumps(data) + "\n")
