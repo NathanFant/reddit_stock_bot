@@ -48,42 +48,53 @@ async def extract_tickers(title, body):
 # ------------------------
 async def analyze_comments_with_llm(session, post):
     prompt = f"""
-Analyze the following Reddit post and its comments for sentiment and relevance.
+Only respond with valid JSON. Do not add code fences, explanations, or extra text.
 
-Title: {post["title"]}
-Body: {post["body"]}
-Comments: {" ".join(post["comments"])}
-
-Respond only in JSON format like this:
+JSON format:
 {{
   "summary": "short rewritten body",
   "sentiment_score": 0-100
 }}
+
+Title: {post["title"]}
+Body: {post["body"]}
+Comments: {" ".join(post["comments"])}
 """
 
     async with session.post(
-        "https://api.openai.com/v1/chat/completions",
+        "http://localhost:11434/api/generate",
         headers={
-            "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
             "Content-Type": "application/json",
         },
         json={
-            "model": "gpt-4o",
-            "messages": [{"role": "user", "content": prompt}],
+            "model": "llama3",
+            "prompt": prompt,
             "temperature": 0.3,
         },
     ) as response:
         if response.status != 200:
-            raise Exception(f"LLM API error: {response.status} {await response.text()}")
-        data = await response.json()
-        content = data["choices"][0]["message"]["content"]
+            raise Exception(
+                f"Ollama API error: {response.status} {await response.text()}"
+            )
+        content = ""
+        async for line in response.content:
+            line = line.decode("utf-8").strip()
+            if not line:
+                continue
+            try:
+                chunk = json.loads(line)
+                if "response" in chunk:
+                    content += chunk["response"]
+            except json.JSONDecodeError as e:
+                print("BAD JSON:", line, e)
+        print("LLM response:", content)
 
     try:
         parsed = json.loads(content)
         post["body"] = parsed.get("summary", post["body"])
         post["sentiment_score"] = parsed.get("sentiment_score", 50)
     except Exception as e:
-        print("Failed to parse LLM response:", content)
+        print("Failed to parse LLM response:", content, e)
         post["sentiment_score"] = 50  # fallback neutral
 
     return post

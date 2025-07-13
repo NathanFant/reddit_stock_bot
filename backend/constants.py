@@ -1,13 +1,13 @@
 SCORE_THRESHOLD = 20  # minimum confidence score to save
 SUBREDDITS = [
-    "stocks",
+    # "stocks",
     "wallstreetbets",
     "smallstreetbets",
     "investing",
     "stockmarket",
     "options",
-    "daytrading",
-    "algotrading",
+    # "daytrading",
+    # "algotrading",
 ]
 FLAIRS_TO_IGNORE = [
     flair.strip().lower()
