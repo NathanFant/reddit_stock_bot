@@ -8,6 +8,7 @@ SUBREDDITS = [
     "options",
     # "daytrading",
     # "algotrading",
+    "spacs",
 ]
 FLAIRS_TO_IGNORE = [
     flair.strip().lower()

@@ -48,17 +48,21 @@ async def extract_tickers(title, body):
 # ------------------------
 async def analyze_comments_with_llm(session, post):
     prompt = f"""
+You are a strictly JSON-based LLM that summarizes Reddit posts and analyzes sentiment.
+You will receive a Reddit post with its title, body, and comments.
 Only respond with valid JSON. Do not add code fences, explanations, or extra text.
 
 JSON format:
 {{
   "summary": "short rewritten body",
-  "sentiment_score": 0-100
+  "sentiment_score": integer between 0 (negative) and 100 (positive)
 }}
 
 Title: {post["title"]}
 Body: {post["body"]}
 Comments: {" ".join(post["comments"])}
+
+Respond with JSON only, no additional text or formatting.
 """
 
     async with session.post(
@@ -68,8 +72,18 @@ Comments: {" ".join(post["comments"])}
         },
         json={
             "model": "llama3",
+            "temperature": 0.2,
+            "stream": False,
+            "options": {
+                "num_ctx": 4096,
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "top_k": 40,
+                "repeat_penalty": 1.1,
+                "seed": 1337,
+                "stop": ["}\n", "\n\n"],
+            },
             "prompt": prompt,
-            "temperature": 0.3,
         },
     ) as response:
         if response.status != 200:
